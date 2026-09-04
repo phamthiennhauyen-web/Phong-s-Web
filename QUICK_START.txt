@@ -1,0 +1,40 @@
+"""
+QUICK START - Casio Compiler Server
+====================================
+
+🎯 MỤC ĐÍCH:
+   File Python này giúp web có thể compile code Assembly cho Casio fx-580VNX
+
+⚡ CÁCH CHẠY NHANH:
+   1. Chạy file này:
+      python compiler_server.py
+   
+   2. Mở index.html trong trình duyệt
+   
+   3. Vào Casio Tools → Viết code ASM → Bấm Compiler
+
+📋 YÊU CẦU:
+   - Python 3.8+
+   - Flask, flask-cors, colorama (đã cài rồi ✓)
+
+🔧 NẾU LỖI:
+   - Lỗi module: pip install -r requirements.txt
+   - Lỗi port 5000: Sửa port trong file này (dòng cuối)
+   - Lỗi khác: Đọc HƯỚNG_DẪN_CHẠY_COMPILER.md
+
+📖 VÍ DỤ CODE ASM:
+   org 0xe9e0
+   setup:
+       setlr
+       setsfr
+       buffer_clear
+   inchu:
+       xr0 = 0x3021 , adr_of text
+       printline
+       render.ddd4
+   text:
+       str "Xin chào"
+       0x00
+
+✅ SERVER SẼ CHẠY TẠI: http://localhost:5000
+"""
