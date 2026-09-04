@@ -38,7 +38,7 @@ def init_580vnx_compiler():
         get_rom('rom.bin')
         
         # Tạo disasm giả để bypass assertion trong read_rename_list
-        libcompiler.disasm = ['nop'] * (1024 * 1024)
+        libcompiler.disasm = ['rt'] * 0x40000
         
         get_commands('gadgets')
         read_rename_list('labels')
