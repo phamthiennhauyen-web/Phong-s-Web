@@ -5,7 +5,7 @@ Casio Compiler Server - Hỗ trợ web compile code ASM cho Casio fx-580VNX
 Chạy file này, sau đó web sẽ gọi đến server để compile code
 """
 
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
 import sys
 import os
@@ -41,8 +41,11 @@ def init_580vnx_compiler():
         libcompiler.disasm = ['rt'] * 0x40000
         
         get_commands('gadgets')
-        read_rename_list('labels')
-        read_rename_list(os.path.join('..', 'labels_sfr'))
+        try:
+            read_rename_list('labels')
+            read_rename_list(os.path.join('..', 'labels_sfr'))
+        except Exception:
+            pass # Không bắt buộc cho compile cơ bản
 
         FONT = [l.split('\t') for l in '''
 															
@@ -246,34 +249,13 @@ set_sp:
 
 @app.route('/')
 def index():
-    """Home page"""
-    return """
-    <html>
-    <head>
-        <title>Casio Compiler Server</title>
-        <style>
-            body { font-family: Arial, sans-serif; max-width: 800px; margin: 50px auto; padding: 20px; }
-            h1 { color: #333; }
-            .status { padding: 10px; background: #4CAF50; color: white; border-radius: 5px; }
-            code { background: #f4f4f4; padding: 2px 6px; border-radius: 3px; }
-        </style>
-    </head>
-    <body>
-        <h1>🔧 Casio Compiler Server</h1>
-        <div class="status">✅ Server đang chạy!</div>
-        <h2>Hướng dẫn sử dụng:</h2>
-        <ol>
-            <li>Mở file <code>index.html</code> trong trình duyệt</li>
-            <li>Vào phần <strong>Casio Tools</strong></li>
-            <li>Viết code ASM và bấm <strong>Compiler</strong></li>
-            <li>Server này sẽ xử lý compilation</li>
-        </ol>
-        <h3>API Endpoint:</h3>
-        <p><code>POST /compile</code> - Gửi code ASM để compile</p>
-        <p>Body: <code>{"code": "org 0xe9e0\\ntext:\\nstr \\"Hello\\""}</code></p>
-    </body>
-    </html>
-    """
+    """Serve main HTML file"""
+    return send_from_directory('.', 'index.html')
+
+@app.route('/<path:path>')
+def serve_static(path):
+    """Serve static files (HTML, CSS, JS)"""
+    return send_from_directory('.', path)
 
 @app.route('/compile', methods=['POST'])
 def compile_endpoint():
