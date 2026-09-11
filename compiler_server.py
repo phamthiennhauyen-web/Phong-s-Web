@@ -131,16 +131,7 @@ def compile_asm(source_code):
     libcompiler.string_vars = {}
     libcompiler.endaddr = ""
     
-    # Capture stderr để lấy thông báo từ note()
-    stderr_capture = io.StringIO()
-    stdout_capture = io.StringIO()
-    
     try:
-        # Redirect stderr và stdout
-        old_stderr = sys.stderr
-        old_stdout = sys.stdout
-        sys.stderr = stderr_capture
-        sys.stdout = stdout_capture
         # Process program line by line
         lines = source_code.split('\n')
         modified_program = []
@@ -230,6 +221,9 @@ set_sp:
                 preprocessed.append(line)
                 i += 1
         
+        # Biến để lưu dòng đang xử lý (để hiển thị khi có lỗi)
+        current_line_being_processed = None
+        
         try:
             # Process each line
             for line_num, line in enumerate(preprocessed, 1):
@@ -238,12 +232,8 @@ set_sp:
                     line = to_lowercase(line)
                 
                 if line:
-                    try:
-                        process(line)
-                    except:
-                        # In ra dòng đang xử lý vào stderr (giống libcompiler.py)
-                        sys.stderr.write(f'Trong lúc tao đang chạy dòng \n{line}\n')
-                        raise
+                    current_line_being_processed = line  # Lưu dòng hiện tại
+                    process(line)
             
             # Finish processing (resolve labels, etc.)
             finish_processing()
@@ -305,26 +295,23 @@ set_sp:
             }
             
         except Exception as e:
-            # Lấy stderr output (chứa dòng "Trong lúc tao đang chạy dòng...")
-            stderr_output = stderr_capture.getvalue()
-            
             # Lấy traceback đầy đủ
             tb_lines = traceback.format_exc()
             
             # Tạo output chi tiết (giống folder compiler gốc)
-            # Ghép stderr output + traceback
-            error_output = f'''{stderr_output}{tb_lines}'''
+            # Thêm dòng "Trong lúc tao đang chạy dòng..." phía trước traceback
+            if current_line_being_processed:
+                error_output = f'''Trong lúc tao đang chạy dòng 
+{current_line_being_processed}
+{tb_lines}'''
+            else:
+                error_output = tb_lines
             
             return {
                 'success': False,
                 'error': str(e),
                 'output': error_output
             }
-        
-        finally:
-            # Luôn luôn restore stderr và stdout
-            sys.stderr = old_stderr
-            sys.stdout = old_stdout
         
     except Exception as outer_e:
         # Nếu có lỗi ở ngoài (setup phase), trả về lỗi đơn giản
