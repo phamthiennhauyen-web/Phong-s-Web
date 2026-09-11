@@ -238,7 +238,12 @@ set_sp:
                     line = to_lowercase(line)
                 
                 if line:
-                    process(line)
+                    try:
+                        process(line)
+                    except:
+                        # In ra dòng đang xử lý vào stderr (giống libcompiler.py)
+                        sys.stderr.write(f'Trong lúc tao đang chạy dòng \n{line}\n')
+                        raise
             
             # Finish processing (resolve labels, etc.)
             finish_processing()
