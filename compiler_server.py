@@ -131,7 +131,16 @@ def compile_asm(source_code):
     libcompiler.string_vars = {}
     libcompiler.endaddr = ""
     
+    # Capture stderr để lấy thông báo từ note()
+    stderr_capture = io.StringIO()
+    stdout_capture = io.StringIO()
+    
     try:
+        # Redirect stderr và stdout
+        old_stderr = sys.stderr
+        old_stdout = sys.stdout
+        sys.stderr = stderr_capture
+        sys.stdout = stdout_capture
         # Process program line by line
         lines = source_code.split('\n')
         modified_program = []
@@ -221,94 +230,103 @@ set_sp:
                 preprocessed.append(line)
                 i += 1
         
-        # Process each line
-        for line_num, line in enumerate(preprocessed, 1):
-            line = canonicalize(del_inline_comment(line))
-            if not line.lower().startswith("str"):
-                line = to_lowercase(line)
-            
-            if line:
-                try:
+        try:
+            # Process each line
+            for line_num, line in enumerate(preprocessed, 1):
+                line = canonicalize(del_inline_comment(line))
+                if not line.lower().startswith("str"):
+                    line = to_lowercase(line)
+                
+                if line:
                     process(line)
-                except Exception as e:
-                    # Thêm thông tin dòng đang xử lý vào exception
-                    raise Exception(f"Lỗi khi xử lý dòng {line_num}: '{line}'\n{str(e)}") from e
-        
-        # Finish processing (resolve labels, etc.)
-        finish_processing()
-        
-        # Determine home address
-        if libcompiler.home is None:
-            if setup_loop_detected or 'loop' in libcompiler.labels:
-                libcompiler.home = 0xD730
-            else:
-                libcompiler.home = 0xE9E0
-        
-        actual_home = libcompiler.home
-        if 'home' in libcompiler.labels:
-            actual_home = libcompiler.home - libcompiler.labels['home']
-        
-        # Resolve adr_of commands
-        for source_adr, offset, target_label in libcompiler.adr_of_cmds:
-            if target_label not in libcompiler.labels:
-                raise ValueError(f'Không tìm thấy nhãn (label): {target_label}')
-            target_adr = actual_home + libcompiler.labels[target_label] + offset
-            libcompiler.result[source_adr] = target_adr & 0xFF
-            libcompiler.result[source_adr + 1] = (target_adr >> 8) & 0xFF
-        
-        # Format output
-        start_addr = libcompiler.home
-        end_addr = libcompiler.home + len(libcompiler.result)
-        
-        hex_bytes = ' '.join(f'{b:02x}' for b in libcompiler.result)
-        
-        # Create hex dump
-        dump = []
-        for idx in range(0, len(libcompiler.result), 16):
-            chunk = libcompiler.result[idx:idx+16]
-            chunk_hex = ' '.join(f'{b:02x}' for b in chunk)
-            chunk_addr = f'0x{libcompiler.home + idx:04x}'
-            dump.append(f'{chunk_addr}:  {chunk_hex}')
-        
-        # Labels info
-        labels_info = ''
-        if libcompiler.labels:
-            labels_info = '\n📌 Vị trí các nhãn (Labels):\n'
-            for lbl, off in libcompiler.labels.items():
-                labels_info += f'  • {lbl}: 0x{actual_home + off:04X} (+{off} bytes)\n'
-        
-        summary = f"""=== 0x{start_addr:04x} -> 0x{end_addr:04x} (Tổng: {len(libcompiler.result)} bytes) ===
+            
+            # Finish processing (resolve labels, etc.)
+            finish_processing()
+            
+            # Determine home address
+            if libcompiler.home is None:
+                if setup_loop_detected or 'loop' in libcompiler.labels:
+                    libcompiler.home = 0xD730
+                else:
+                    libcompiler.home = 0xE9E0
+            
+            actual_home = libcompiler.home
+            if 'home' in libcompiler.labels:
+                actual_home = libcompiler.home - libcompiler.labels['home']
+            
+            # Resolve adr_of commands
+            for source_adr, offset, target_label in libcompiler.adr_of_cmds:
+                if target_label not in libcompiler.labels:
+                    raise ValueError(f'Không tìm thấy nhãn (label): {target_label}')
+                target_adr = actual_home + libcompiler.labels[target_label] + offset
+                libcompiler.result[source_adr] = target_adr & 0xFF
+                libcompiler.result[source_adr + 1] = (target_adr >> 8) & 0xFF
+            
+            # Format output
+            start_addr = libcompiler.home
+            end_addr = libcompiler.home + len(libcompiler.result)
+            
+            hex_bytes = ' '.join(f'{b:02x}' for b in libcompiler.result)
+            
+            # Create hex dump
+            dump = []
+            for idx in range(0, len(libcompiler.result), 16):
+                chunk = libcompiler.result[idx:idx+16]
+                chunk_hex = ' '.join(f'{b:02x}' for b in chunk)
+                chunk_addr = f'0x{libcompiler.home + idx:04x}'
+                dump.append(f'{chunk_addr}:  {chunk_hex}')
+            
+            # Labels info
+            labels_info = ''
+            if libcompiler.labels:
+                labels_info = '\n📌 Vị trí các nhãn (Labels):\n'
+                for lbl, off in libcompiler.labels.items():
+                    labels_info += f'  • {lbl}: 0x{actual_home + off:04X} (+{off} bytes)\n'
+            
+            summary = f"""=== 0x{start_addr:04x} -> 0x{end_addr:04x} (Tổng: {len(libcompiler.result)} bytes) ===
 
 📦 HEX ARRAY (Raw):
 {hex_bytes}
 
 📄 HEX DUMP:
 {chr(10).join(dump)}{labels_info}"""
+            
+            return {
+                'success': True,
+                'output': summary,
+                'rawHex': hex_bytes,
+                'byteCount': len(libcompiler.result),
+                'home': libcompiler.home
+            }
+            
+        except Exception as e:
+            # Lấy stderr output (chứa dòng "Trong lúc tao đang chạy dòng...")
+            stderr_output = stderr_capture.getvalue()
+            
+            # Lấy traceback đầy đủ
+            tb_lines = traceback.format_exc()
+            
+            # Tạo output chi tiết (giống folder compiler gốc)
+            # Ghép stderr output + traceback
+            error_output = f'''{stderr_output}{tb_lines}'''
+            
+            return {
+                'success': False,
+                'error': str(e),
+                'output': error_output
+            }
         
-        return {
-            'success': True,
-            'output': summary,
-            'rawHex': hex_bytes,
-            'byteCount': len(libcompiler.result),
-            'home': libcompiler.home
-        }
+        finally:
+            # Luôn luôn restore stderr và stdout
+            sys.stderr = old_stderr
+            sys.stdout = old_stdout
         
-    except Exception as e:
-        # Lấy traceback đầy đủ
-        tb_lines = traceback.format_exc()
-        
-        # Tạo output chi tiết (giống folder compiler gốc)
-        error_output = f'''❌ Lỗi biên dịch:
-
-{tb_lines}
-
-💡 Gợi ý: Kiểm tra lại cú pháp lệnh Assembly và tên các labels.
-'''
-        
+    except Exception as outer_e:
+        # Nếu có lỗi ở ngoài (setup phase), trả về lỗi đơn giản
         return {
             'success': False,
-            'error': str(e),
-            'output': error_output
+            'error': str(outer_e),
+            'output': f'❌ Lỗi khởi tạo:\n{traceback.format_exc()}'
         }
 
 @app.route('/')
