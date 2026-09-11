@@ -10,6 +10,8 @@ from flask_cors import CORS
 import sys
 import os
 import io
+import traceback
+import re
 from contextlib import redirect_stdout, redirect_stderr
 
 # Add hdcompiler_vn to path
@@ -172,14 +174,65 @@ set_sp:
         if not setup_loop_detected:
             modified_program = lines
         
+        # Preprocess: Merge multi-line hex data
+        # Khi gặp dòng "hex XX XX ...", nối các dòng tiếp theo chỉ chứa hex bytes
+        preprocessed = []
+        i = 0
+        while i < len(modified_program):
+            line = modified_program[i].strip()
+            line_clean = canonicalize(del_inline_comment(line))
+            
+            # Nếu dòng này bắt đầu với 'hex'
+            if line_clean.lower().startswith('hex'):
+                hex_data = line_clean
+                j = i + 1
+                
+                # Đọc tiếp các dòng sau chỉ chứa hex bytes
+                while j < len(modified_program):
+                    next_line = modified_program[j].strip()
+                    if not next_line:  # Dòng trống
+                        j += 1
+                        continue
+                    
+                    next_clean = canonicalize(del_inline_comment(next_line))
+                    
+                    # Kiểm tra xem dòng tiếp theo có phải là label (có ':') hay lệnh mới không
+                    if ':' in next_clean:
+                        break
+                    
+                    # Kiểm tra xem có phải là lệnh mới không
+                    keywords = ['hex', 'str', 'org', 'setup_loop', 'setlr', 'setsfr', 
+                               'buffer_clear', 'render', 'xr0', 'er0', 'qr0', 'r0', 'r1', 
+                               'push', 'pop', 'rt', 'di', 'ei', 'nop']
+                    is_command = any(next_clean.lower().startswith(kw) for kw in keywords)
+                    if is_command:
+                        break
+                    
+                    # Kiểm tra xem có phải toàn hex bytes không (chỉ chứa 0-9, a-f, A-F, và khoảng trắng)
+                    if re.match(r'^[0-9a-fA-F\s]+$', next_clean):
+                        hex_data += ' ' + next_clean
+                        j += 1
+                    else:
+                        break
+                
+                preprocessed.append(hex_data)
+                i = j
+            else:
+                preprocessed.append(line)
+                i += 1
+        
         # Process each line
-        for line in modified_program:
+        for line_num, line in enumerate(preprocessed, 1):
             line = canonicalize(del_inline_comment(line))
             if not line.lower().startswith("str"):
                 line = to_lowercase(line)
             
             if line:
-                process(line)
+                try:
+                    process(line)
+                except Exception as e:
+                    # Thêm thông tin dòng đang xử lý vào exception
+                    raise Exception(f"Lỗi khi xử lý dòng {line_num}: '{line}'\n{str(e)}") from e
         
         # Finish processing (resolve labels, etc.)
         finish_processing()
@@ -241,10 +294,21 @@ set_sp:
         }
         
     except Exception as e:
+        # Lấy traceback đầy đủ
+        tb_lines = traceback.format_exc()
+        
+        # Tạo output chi tiết (giống folder compiler gốc)
+        error_output = f'''❌ Lỗi biên dịch:
+
+{tb_lines}
+
+💡 Gợi ý: Kiểm tra lại cú pháp lệnh Assembly và tên các labels.
+'''
+        
         return {
             'success': False,
             'error': str(e),
-            'output': f'❌ Lỗi biên dịch:\n{str(e)}'
+            'output': error_output
         }
 
 @app.route('/')
