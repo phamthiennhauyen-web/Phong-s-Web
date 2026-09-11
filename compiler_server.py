@@ -222,6 +222,7 @@ set_sp:
                 i += 1
         
         # Biến để lưu dòng đang xử lý (để hiển thị khi có lỗi)
+        current_line_number = 0
         current_line_being_processed = None
         
         try:
@@ -232,6 +233,7 @@ set_sp:
                     line = to_lowercase(line)
                 
                 if line:
+                    current_line_number = line_num  # Lưu số dòng
                     current_line_being_processed = line  # Lưu dòng hiện tại
                     process(line)
             
@@ -295,17 +297,25 @@ set_sp:
             }
             
         except Exception as e:
-            # Lấy traceback đầy đủ
-            tb_lines = traceback.format_exc()
+            # Tạo thông báo lỗi ngắn gọn, rõ ràng
+            error_message = str(e)
             
-            # Tạo output chi tiết (giống folder compiler gốc)
-            # Thêm dòng "Trong lúc tao đang chạy dòng..." phía trước traceback
-            if current_line_being_processed:
-                error_output = f'''Trong lúc tao đang chạy dòng 
-{current_line_being_processed}
-{tb_lines}'''
+            # Xử lý các loại lỗi phổ biến
+            if 'Có lệnh này đâu má' in error_message or 'AssertionError' in str(type(e)):
+                reason = "Làm gì có lệnh này đâu má :v"
+            elif 'Không tìm thấy nhãn' in error_message or 'label' in error_message.lower():
+                reason = f"{error_message}"
+            elif 'Invalid' in error_message or 'syntax' in error_message.lower():
+                reason = f"Cú pháp sai: {error_message}"
             else:
-                error_output = tb_lines
+                reason = error_message
+            
+            # Format output đơn giản
+            if current_line_being_processed:
+                error_output = f'''❌ Lỗi dòng {current_line_number}: {current_line_being_processed}
+{reason}'''
+            else:
+                error_output = f'❌ Lỗi biên dịch:\n{reason}'
             
             return {
                 'success': False,
